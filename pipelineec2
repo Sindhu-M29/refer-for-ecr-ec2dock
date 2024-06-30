@@ -47,7 +47,8 @@ pipeline {
                                 "docker pull 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest",
                                 "docker stop myapp || true",
                                 "docker rm myapp || true",
-                                "docker run -d --name myapp -p 80:8000 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest"
+                                "docker run -d --name myapp -p 8001:80 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest",
+                                //"docker run -d --name myapp1 -p 8002:80 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest"
                             ]' \
                             --comment "Deploying Docker container to EC2 instance"
                         '''
@@ -57,3 +58,5 @@ pipeline {
         }    
     }
 }
+
+// commented line is for checking to access mulitple container with multiple host port
