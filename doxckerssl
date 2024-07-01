@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_CREDENTIALS = credentials('2cb36e1d-ecf0-4bfd-85f7-6fe7adca767f')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git credentialsId: 'f29894bb-8c57-4d21-aa5e-213364436295', branch: 'main', url: 'https://github.com/Sindhu-M29/dockerwork-1.git'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    sh 'sudo chmod -R 777 /var/www/html'
+                    sh 'docker build -t myapp .'
+                    sh 'docker images'
+                    
+                    // Check if the Docker image 'myapp' exists
+                    def imageExists = sh(script: 'docker images | grep myapp', returnStatus: true)
+                    if (imageExists != 0) {
+                        error "Docker image 'myapp' not found."
+                    }
+                }
+            }
+        }
+        
+        stage('Push') {
+            steps {
+                script {
+                    withAWS(credentials: '2cb36e1d-ecf0-4bfd-85f7-6fe7adca767f', region: 'us-east-1') {
+                        sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 526869063997.dkr.ecr.us-east-1.amazonaws.com'
+                        sh 'docker tag myapp:latest 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest'
+                        sh 'docker push 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest'
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                script {
+                    withAWS(credentials: '2cb36e1d-ecf0-4bfd-85f7-6fe7adca767f', region: 'us-east-1') {
+                        sh '''
+                        aws ssm send-command \
+                            --document-name "AWS-RunShellScript" \
+                            --targets "Key=instanceids,Values=i-0a4efcfa94fa9b33f" \
+                            --parameters 'commands=[
+                                "export AWS_ACCESS_KEY_ID=AKIAXVK6X5E6R355PT2Y",
+                                "export AWS_SECRET_ACCESS_KEY=,",
+                                "export AWS_DEFAULT_REGION=us-east-1",
+                                "$(aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 526869063997.dkr.ecr.us-east-1.amazonaws.com)",
+                                "docker pull 526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest",
+                                "docker stop myapp || true",
+                                "docker rm myapp || true",
+                                "docker run -d --name myapp -p 8001:443  526869063997.dkr.ecr.us-east-1.amazonaws.com/ec2dock:latest",
+                                "docker ps | grep myapp",
+                                    
+                            ]' \
+                            --comment "Deploying Docker container to EC2 instance"
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
